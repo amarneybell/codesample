@@ -1,0 +1,201 @@
+---
+title: "Code Sample"
+author: "Alli Marney-Bell"
+date: "2024-05-22"
+output: html_document
+---
+
+# SETUP
+```{r setup}
+knitr::opts_chunk$set(message = FALSE, eval = FALSE)
+library(tidyverse)
+library(sf)
+```
+
+Create a function for tidying downloaded data to long-form 
+```{r}
+# function for tidying data to long form
+pivot_long <- function(df, prefix, column_name) {
+  pivoted_df <- pivot_longer(df, 
+                                    cols = starts_with(prefix),
+                                    names_to = "Year",
+                                    names_prefix = prefix,
+                                    values_to = column_name) %>% 
+    select(CSA2010, Year, .data[[column_name]]) %>% 
+    rename(Community = CSA2010) 
+  return(pivoted_df) 
+}
+```
+
+# DATA IMPORT
+## RACE
+ 
+```{r race, message = FALSE}
+# BLACK
+share_black <- st_read("data/data2021/Percent_of_Residents_-_Black_African-American_(Non-Hispanic).geojson")
+# fix CSA name
+share_black$CSA2010[share_black$CSA2010 == "Orchard Ridge/Armistead"] <- "Claremont/Armistead"
+share_black$CSA2010[share_black$CSA2010 == "Oliver/Johnson Square"] <- "Greenmount East"
+share_black$CSA2010[share_black$CSA2010 == "Hamilton Hills"] <- "Harford/Echodale"
+# pivot to long form
+share_black_long <- pivot_long(share_black, "paa", "Share_Black")
+# check
+glimpse(share_black_long)
+
+# WHITE
+share_white <- st_read("data/dataBNIA/Percent_of_Residents_-_White_Caucasian_(Non-Hispanic).geojson")
+# pivot to long form
+share_white_long <- pivot_long(share_white, "pwhite", "Share_White")
+# check
+glimpse(share_white_long)
+
+
+# ASIAN
+share_asian <- st_read("data/dataBNIA/Percent_of_Residents_-_Asian_(Non-Hispanic).geojson")
+# fix CSA name
+share_asian$CSA2010[share_asian$CSA2010 == "Orchard Ridge/Armistead"] <- "Claremont/Armistead"
+share_asian$CSA2010[share_asian$CSA2010 == "Oliver/Johnson Square"] <- "Greenmount East"
+share_asian$CSA2010[share_asian$CSA2010 == "Hamilton Hills"] <- "Harford/Echodale"
+# pivot to long form
+share_asian_long <- pivot_long(share_asian, "pasi", "Share_Asian")
+# check
+glimpse(share_asian_long)
+
+# HISPANIC
+share_hispanic <- st_read("data/dataBNIA/Percent_of_Residents_-_Hispanic.geojson") %>% 
+  rename(phisp17 = phsip17)
+# fix CSA name
+share_hispanic$CSA2010[share_hispanic$CSA2010 == "Orchard Ridge/Armistead"] <- "Claremont/Armistead"
+share_hispanic$CSA2010[share_hispanic$CSA2010 == "Oliver/Johnson Square"] <- "Greenmount East"
+share_hispanic$CSA2010[share_hispanic$CSA2010 == "Hamilton Hills"] <- "Harford/Echodale"
+# pivot to long form 
+share_hispanic_long <- pivot_long(share_hispanic, "phisp", "Share_Hispanic")
+# check
+glimpse(share_hispanic_long) 
+
+# TWO OR MORE
+share_tworaces <- st_read("data/dataBNIA/Percent_of_Residents_-_Two_or_More_Races_(Non-Hispanic).geojson")
+# pivot to long form
+share_tworaces_long <- pivot_long(share_tworaces, "p2more", "Share_2more")
+# check
+glimpse(share_tworaces_long)
+
+# ALL OTHER
+share_allother <- st_read("data/dataBNIA/Percent_of_Residents_-_All_Other_Races_(Hawaiian__Pacific_Islander%2C_Alaskan__Native_American_Other_Race)_(Non-Hispanic).geojson")
+# pivot to long form
+share_allother_long <- pivot_long(share_allother, "ppac", "Share_Other")
+# check
+glimpse(share_allother_long)
+
+# check that race shares add up to 100:
+# join all dfs
+total_race_count <- left_join(share_black_long, 
+                              as.data.frame(share_white_long), 
+                              by = c("Community", "Year", "geometry")) %>% 
+  left_join(as.data.frame(share_asian_long), 
+            by = c("Community", "Year", "geometry")) %>% 
+  left_join(as.data.frame(share_hispanic_long, 
+            by = c("Community", "Year", "geometry"))) %>%
+  left_join(as.data.frame(share_tworaces_long), 
+            by = c("Community", "Year", "geometry")) %>%
+  left_join(as.data.frame(share_allother_long), 
+            by = c("Community", "Year", "geometry")) %>% 
+  mutate(total_race = Share_Black + Share_White + Share_Asian + 
+                      Share_Hispanic + Share_2more + Share_Other) %>% 
+  as.data.frame() %>% 
+  select(-contains("geometry"))
+
+# check for non-100 count
+total_race_count %>% 
+  filter(total_race != 100)
+```
+##  AGE
+2020 data
+```{r message = FALSE}
+
+# import 2020 data
+
+age_under5 <- read_csv("data/dataBNIA/under 5 20.csv") %>% 
+  transmute(Community = Community,
+            under5_20 = `2020 Data`) %>% 
+  filter(Community != "Baltimore City")
+age_under5
+
+age5_17 <- read_csv("data/dataBNIA/5-17 20.csv") %>% 
+  transmute(Community = Community,
+            age5_17_2020 = `2020 Data`) %>% 
+  filter(Community != "Baltimore City")
+
+age18_24 <- read_csv("data/dataBNIA/18-24 20.csv") %>% 
+  transmute(Community = Community,
+            age18_24_2020 = `2020 Data`) %>% 
+  filter(Community != "Baltimore City")
+
+age25_64 <- read_csv("data/dataBNIA/25-64 20.csv") %>% 
+  transmute(Community = Community,
+            age25_64_2020 = `2020 Data`) %>% 
+  filter(Community != "Baltimore City")
+
+age_over65 <- read_csv("data/dataBNIA/65 over 20.csv") %>% 
+  transmute(Community = Community,
+            age_over65_2020 = `2020 Data`) %>% 
+  filter(Community != "Baltimore City")
+
+```
+2015-2019, 2021 data
+```{r}
+
+# import 15-19, 21 data and append 2020 data 
+###########
+share_under5 <- st_read("data/dataBNIA/Percent_of_Population_Under_5_Years_old.geojson") %>% 
+  rename(age5_20 = CSA2020)
+share_under5$age5_20 <- age_under5$under5_20
+
+share_5_17 <- st_read("data/dataBNIA/Percent_of_Population_5-17_Years_old.geojson") %>% 
+  rename(age18_20 = CSA2020)
+share_5_17$age18_20 <- age5_17$age5_17_2020
+
+share_18_24 <- st_read("data/dataBNIA/Percent_of_Population_18-24_Years_old.geojson") %>% 
+  rename(age24_20 = CSA2020)
+share_18_24$age24_20 <- age18_24$age18_24_2020
+
+share_25_64 <- st_read("data/dataBNIA/Percent_of_Population_25-64_Years_old.geojson") %>% 
+  rename(age64_20 = CSA2020)
+share_25_64$age64_20 <- age25_64$age25_64_2020
+
+share_over65 <- st_read("data/dataBNIA/Percent_of_Population_65_Years_and_over.geojson") %>% 
+  rename(age65_20 = CSA2020)
+share_over65$age65_20 <- age_over65$age_over65_2020
+
+##################
+# pivot to long form
+# age5
+share_under5_long <- pivot_long(share_under5, "age5_", "Under_5") 
+
+# age18
+share_5_17_long <- pivot_long(share_5_17, "age18_", "Share_5_17")
+
+# age24_
+share_18_24_long <- pivot_long(share_18_24, "age24_", "Share_18_24")
+ 
+# age64_
+share_25_64_long <- pivot_long(share_25_64, "age64_", "Share_25_64")
+ 
+# age65_
+share_over65_long <- pivot_long(share_over65, "age65_", "Share_Over65")
+
+#####
+# check that all age shares add to 100
+# join the data to create the variable that should capture all shares of age
+total_age_count <- left_join(share_under5_long, as.data.frame(share_5_17_long)) %>% 
+                   left_join(as.data.frame(share_18_24_long)) %>%
+                   left_join(as.data.frame(share_25_64_long)) %>%
+                   left_join(as.data.frame(share_over65_long)) %>% 
+  mutate(total_age_count = round(Under_5 + Share_5_17 + Share_18_24 + Share_25_64 + Share_Over65)) %>% 
+  as.data.frame() %>% 
+  select(-contains("geometry"))
+
+# display any shares that have non-100 sums
+total_age_count %>% 
+  filter(total_age_count != 100)
+```
